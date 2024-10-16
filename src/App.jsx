@@ -1,26 +1,60 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from "react";
 
-import Places from './components/Places.jsx';
-import { AVAILABLE_PLACES } from './data.js';
-import Modal from './components/Modal.jsx';
-import DeleteConfirmation from './components/DeleteConfirmation.jsx';
-import logoImg from './assets/logo.png';
+import Places from "./components/Places.jsx";
+import { AVAILABLE_PLACES } from "./data.js";
+import Modal from "./components/Modal.jsx";
+import DeleteConfirmation from "./components/DeleteConfirmation.jsx";
+import logoImg from "./assets/logo.png";
+import { sortPlacesByDistance } from "./loc.js";
+
+const alreadySelectedIds = localStorage.getItem("userSelectedPlaces")
+  ? JSON.parse(localStorage.getItem("userSelectedPlaces"))
+  : [];
+const alreadySelectedPlaces = alreadySelectedIds.map((id) => {
+  return AVAILABLE_PLACES.find((place) => place.id === id);
+});
+
+console.log(alreadySelectedPlaces, alreadySelectedIds);
 
 function App() {
-  const modal = useRef();
+  const [modalIsOpen, setModalIsOpen] = useState(false);
   const selectedPlace = useRef();
-  const [pickedPlaces, setPickedPlaces] = useState([]);
+  const [pickedPlaces, setPickedPlaces] = useState(alreadySelectedPlaces);
+  const [availablePlaces, setAvailablePlaces] = useState([]);
+
+  useEffect(() => {
+    navigator.geolocation.getCurrentPosition((position) => {
+      const sortedPlaces = sortPlacesByDistance(
+        AVAILABLE_PLACES,
+        position.coords.latitude,
+        position.coords.longitude
+      );
+
+      setAvailablePlaces(sortedPlaces);
+    });
+  }, []);
 
   function handleStartRemovePlace(id) {
-    modal.current.open();
+    setModalIsOpen(true);
     selectedPlace.current = id;
   }
 
   function handleStopRemovePlace() {
-    modal.current.close();
+    setModalIsOpen(false);
   }
 
   function handleSelectPlace(id) {
+    const userSelectedPlaces = localStorage.getItem("userSelectedPlaces")
+      ? JSON.parse(localStorage.getItem("userSelectedPlaces"))
+      : [];
+
+    if (userSelectedPlaces.indexOf(id) === -1) {
+      localStorage.setItem(
+        "userSelectedPlaces",
+        JSON.stringify([id, ...userSelectedPlaces])
+      );
+    }
+
     setPickedPlaces((prevPickedPlaces) => {
       if (prevPickedPlaces.some((place) => place.id === id)) {
         return prevPickedPlaces;
@@ -31,15 +65,23 @@ function App() {
   }
 
   function handleRemovePlace() {
+    const userSelectedPlaces = localStorage.getItem("userSelectedPlaces")
+      ? JSON.parse(localStorage.getItem("userSelectedPlaces"))
+      : [];
+    const filteredArray = userSelectedPlaces.filter(
+      (item) => item !== selectedPlace.current
+    );
+    localStorage.setItem("userSelectedPlaces", JSON.stringify(filteredArray));
+
     setPickedPlaces((prevPickedPlaces) =>
       prevPickedPlaces.filter((place) => place.id !== selectedPlace.current)
     );
-    modal.current.close();
+    setModalIsOpen(false);
   }
 
   return (
     <>
-      <Modal ref={modal}>
+      <Modal modalIsOpen={modalIsOpen} onClose={handleStopRemovePlace}>
         <DeleteConfirmation
           onCancel={handleStopRemovePlace}
           onConfirm={handleRemovePlace}
@@ -57,13 +99,13 @@ function App() {
       <main>
         <Places
           title="I'd like to visit ..."
-          fallbackText={'Select the places you would like to visit below.'}
+          fallbackText={"Select the places you would like to visit below."}
           places={pickedPlaces}
           onSelectPlace={handleStartRemovePlace}
         />
         <Places
           title="Available Places"
-          places={AVAILABLE_PLACES}
+          places={availablePlaces}
           onSelectPlace={handleSelectPlace}
         />
       </main>
